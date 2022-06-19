@@ -94,7 +94,6 @@ def go_into_dir(full_path):
                     except FileExistsError:
                         current_path += b + "/"
 
-            print(current_path, all_dirs)
             shutil.copy(full_path, "static"+all_dirs)
 
         full_path = old
