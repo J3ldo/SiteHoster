@@ -2,6 +2,12 @@
 ## Does not yet work with directories
 This is a simple site hoster for a local network made in Python.
 
+## What it does
+* Host .html files.
+* Host a static site.
+* Go in to directories.
+* Show images/files.
+
 ## How to use
 First open up the config.ini file and see if everything is what you want it to be.  
 If you are using any static files like photo's and such make sure to put /static/ on the start of the file location.
