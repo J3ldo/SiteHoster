@@ -1,7 +1,6 @@
 # SiteHoster
-## Does not yet work with directories
 This is a simple site hoster for a local network made in Python.
-# Currently not working
+# Currently not working!!
 
 ## What it does
 * Host .html files.
