@@ -1,76 +1,132 @@
-import os, shutil
-from WebApp import WebApp, render_template
+import os
+import socket
+import datetime
+import threading
+import traceback
+
+def render_template(template):
+    with open(f"templates/{template}") as f:
+        return "<h1></h1>" + f.read().strip('\n')
+
+def get_file(file):
+    if os.path.exists("./static/"+file):
+        with open("./static/"+file, 'rb') as f:
+            f_data = f.read()
+
+        return True, f_data
+    return False, 0
+
+class WebApp:
+    def __init__(self):
+        self.routes = {}
 
 
-class Configreader:
-    def __init__(self, splitwith="="):
-        self.splitwith = splitwith
+    def route(self, *args):
+        def inner(func):
+            if len(args) <= 0:
+                raise Exception('You need to pass the route of the url.')
+            elif self.routes.get(args[0]) is not None:
+                raise Exception("Route already exists")
 
-    def readfile(self, filepath):
-        with open(filepath, 'r') as f:
-            filecontents = [i.strip('\n') for i in f.readlines()]
+            self.routes[args[0]] = {'func': func, 'methods': args[1] if len(args) > 1 else ['GET']}
 
-        out = {}
-        for line in filecontents:
+        return inner
+
+
+    #print(socket.gethostbyname(socket.gethostname()))
+    def listen(self, clientdata, addr, debug):
+        listening = True
+        while listening:
             try:
-                out[line.split('=')[0]] = line.split('=')[1]
-            except IndexError:
-                pass
+                msg = clientdata.recv(4096).decode()
+            except ConnectionAbortedError:
+                print("Connection broken with:", addr)
+                break
 
-        return out
-
-config = Configreader().readfile("config.ini")
-app = WebApp()
-
-routeid, routes = 0, []
-temprouteid = 0
-class Createroute:
-    def __init__(self, route, file):
-        routes.append([route, file])
-        global routeid
-        self.id = routeid
-        temprouteid = routeid
+            if msg == "":
+                continue
 
 
-        @app.route(routes[temprouteid][0])
-        def newroute():
-            return render_template(routes[temprouteid][1])
+            msg = msg.split("\n")
+            request_headers = {}
+            for i in msg:
+                try:
+                    out = i.strip("\r").split(": ")
+                    request_headers[out[0]] = out[1]
+                except:
+                    continue
+
+            location = msg[0].split()[1]
+            method = msg[0].split()[0]
+            response_code = 500
+
+            if self.routes.get(location) is not None:
+                if method not in self.routes[location]['methods']:
+                    response_code = 405
+                    clientdata.send(
+                        f'HTTP/1.0 {response_code} Method not allowed'
+                        '\n\n'
+                        'Method not allowed'.encode()
+                    )
 
 
-        routeid += 1
+                try:
+                    response_code = 200
+                    clientdata.send(
+                        f'HTTP/1.0 {response_code} OK'
+                        '\n\n'
+                        f'{self.routes[location]["func"]()}'.encode()
+                    )
+                except Exception as e:
+                    response_code = 500
+                    if debug:
+                        response_code = 500
+                        clientdata.send(
+                            f'HTTP/1.0 {response_code} Server error'
+                            '\n\n'
+                            f'<h1>Error log</h1>\n<h4>{traceback.format_exc()}<h4>'.encode()
+                        )
+                    elif not debug:
+                        clientdata.send(
+                            f'HTTP/1.0 {response_code} Server Error'
+                            '\n\n'
+                            f'Something went wrong.'.encode()
+                        )
+            else:
+                is_file = get_file(location)
+                if is_file[0]:
+                    response_code = 200
+                    clientdata.send(
+                        f'HTTP/1.1 {response_code} OK\n'
+                        f"Content-Type: image/jpeg\n"
+                        "Accept-Ranges: bytes\n\n".encode()
+                    )
+                    clientdata.send(is_file[1])
 
-def into_new_dir(full_path, dir):
-    for i in os.listdir(full_path):
-        if os.path.isdir(f"{full_path}/{i}"):
-            return into_new_dir(full_path, i)
+                else:
+                    response_code = 404
+                    clientdata.send(
+                        f'HTTP/1.0 {response_code} Not Found'
+                        '\n\n'
+                        '<h1>404 not found</h1>'.encode()
+                    )
 
-        elif i.endswith(".html"):
-            shutil.copy(f"{full_path}/{i}", "templates")
-            Createroute(f"/{full_path[-len(config['sitedirectory']):]}/{i.split('.html')[0]}", i)
-        else:
-            shutil.copy(f"{full_path}/{i}", "static")
-
-
-
-if __name__ == '__main__':
-    if not os.path.exists("templates"): os.mkdir("templates")
-    if not os.path.exists("static"): os.mkdir('static')
-
-    for i in os.listdir(f"{config['sitedirectory']}"):
-        full_path = f"{config['sitedirectory']}/{i}"
-
-        if os.path.isdir(full_path):
-            into_new_dir(full_path, i)
-
-        elif i.endswith(".html"):
-            shutil.copy(full_path, "templates")
-            Createroute(f"/{i.split('.html')[0]}" if i != "index.html" else "/", i)
-        else:
-            shutil.copy(full_path, "static")
+            print(f"{datetime.datetime.now().strftime('%d/%m/%Y %H:%M:%S')} - HTTP '{location}' {response_code} - {addr[0]}")
+            clientdata.close()
+            listening = False
 
 
-    try:
-        app.start(config["ip"], int(config["port"]), debug=True if config["debug"] == "True" else False)
-    finally:
-        if os.path.exists("static"): os.rmdir('static')
-        if os.path.exists("static"): os.rmdir('templates')
+
+    def start(self, ip , port, debug=False):
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        PORT = port  # 80
+        IP = ip  # "0.0.0.0"
+        s.bind((IP, PORT))
+        print(f"Listening on: http://{socket.gethostbyname(socket.gethostname() if IP == '0.0.0.0' else IP)}:{PORT}")
+
+        s.listen()
+        while True:
+            clientdata, addr = s.accept()
+
+            thread = threading.Thread(target=self.listen, args=(clientdata, addr, debug,))
+            thread.start()
