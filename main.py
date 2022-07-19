@@ -45,7 +45,7 @@ def into_new_dir(full_path):
 
         elif i.endswith(".html"):
             shutil.copy(f"{full_path}/{i}", "templates")
-            Createroute(f"/{full_path[-len(config['sitedirectory']):]}/{i.split('.html')[0]}", i)
+            Createroute(f"/{full_path[len(config['sitedirectory'])+1:]}/{i.split('.html')[0]}", i)
         else:
             shutil.copy(f"{full_path}/{i}", "static")
 
