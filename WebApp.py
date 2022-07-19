@@ -1,3 +1,4 @@
+import os
 import socket
 import datetime
 import threading
@@ -6,6 +7,14 @@ import traceback
 def render_template(template):
     with open(f"templates/{template}") as f:
         return "<h1></h1>" + f.read().strip('\n')
+
+def get_file(file):
+    if os.path.exists("./static/"+file):
+        with open("./static/"+file, 'rb') as f:
+            f_data = f.read()
+
+        return True, f_data
+    return False, 0
 
 class WebApp:
     def __init__(self):
@@ -68,7 +77,7 @@ class WebApp:
                         '\n\n'
                         f'{self.routes[location]["func"]()}'.encode()
                     )
-                except Exception as e:
+                except Exception:
                     response_code = 500
                     if debug:
                         response_code = 500
@@ -84,12 +93,23 @@ class WebApp:
                             f'Something went wrong.'.encode()
                         )
             else:
-                response_code = 404
-                clientdata.send(
-                    f'HTTP/1.0 {response_code} Not Found'
-                    '\n\n'
-                    '<h1>404 not found</h1>'.encode()
-                )
+                is_file = get_file(location)
+                if is_file[0]:
+                    response_code = 200
+                    clientdata.send(
+                        f'HTTP/1.1 {response_code} OK\n'
+                        f"Content-Type: image/jpeg\n"
+                        "Accept-Ranges: bytes\n\n".encode()
+                    )
+                    clientdata.send(is_file[1])
+
+                else:
+                    response_code = 404
+                    clientdata.send(
+                        f'HTTP/1.0 {response_code} Not Found'
+                        '\n\n'
+                        '<h1>404 not found</h1>'.encode()
+                    )
 
             print(f"{datetime.datetime.now().strftime('%d/%m/%Y %H:%M:%S')} - HTTP '{location}' {response_code} - {addr[0]}")
             clientdata.close()
